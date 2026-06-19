@@ -1,0 +1,22 @@
+# Checkpoints y pesos — demasiado grandes para GitHub (usar Kaggle dataset)
+pretrained/
+*.ckpt
+*.pth
+
+# Dataset — se monta en Kaggle
+M3FD/
+dataset/KAIST512/
+KAIST/
+
+# Logs de entrenamiento
+logs/
+lightning_logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Temporales
+extract_temp.py

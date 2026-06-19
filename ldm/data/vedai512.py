@@ -81,11 +81,13 @@ class VEDAIBase(Dataset):
                            for l in self.image_paths],
         }
         self.size = size
-        self.interpolation = {"linear": PIL.Image.LINEAR,
-                              "bilinear": PIL.Image.BILINEAR,
-                              "bicubic": PIL.Image.BICUBIC,
-                              "lanczos": PIL.Image.LANCZOS,
-                              }[interpolation]
+        _resampling = getattr(PIL.Image, "Resampling", PIL.Image)
+        self.interpolation = {
+            "linear":   _resampling.BILINEAR,
+            "bilinear": _resampling.BILINEAR,
+            "bicubic":  _resampling.BICUBIC,
+            "lanczos":  _resampling.LANCZOS,
+        }[interpolation]
         self.flip_enhance = my_transform_flip(flip_p=flip_p)
         self.gray_enhance = my_transform_gray(gray_p=flip_p)
         self.crop_enhance = my_transform_crop(crop_p=flip_p)
