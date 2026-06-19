@@ -24,7 +24,7 @@ class HADARNet(nn.Module):
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
     
     def init_from_ckpt(self, path, ignore_keys=list()):
-        sd = torch.load(path, map_location=lambda storage, loc: storage)["state_dict"]
+        sd = torch.load(path, map_location=lambda storage, loc: storage, weights_only=False)["state_dict"]
         for n, _ in list(sd.items()):
             sd[n.replace('module.','')] = sd.pop(n)
         keys = list(sd.keys())
