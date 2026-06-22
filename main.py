@@ -415,6 +415,75 @@ class CUDACallback(Callback):
             pass
 
 
+class KaggleCheckpointUploader(Callback):
+    """Sube el mejor checkpoint a Kaggle Datasets después de cada época de validación."""
+
+    def __init__(self, dataset="ginoquinde/pid-m3fd-checkpoints"):
+        super().__init__()
+        self.dataset = dataset
+        self._token_configured = False
+
+    def _setup_token(self):
+        if self._token_configured:
+            return True
+        token = os.environ.get("KAGGLE_TOKEN") or os.environ.get("KAGGLE_API_TOKEN", "")
+        if not token:
+            print("[KaggleUploader] KAGGLE_TOKEN no configurado, se omite el upload.")
+            return False
+        kaggle_dir = os.path.expanduser("~/.kaggle")
+        os.makedirs(kaggle_dir, exist_ok=True)
+        import json
+        creds = {"username": "ginoquinde", "key": token}
+        creds_path = os.path.join(kaggle_dir, "kaggle.json")
+        with open(creds_path, "w") as f:
+            json.dump(creds, f)
+        os.chmod(creds_path, 0o600)
+        self._token_configured = True
+        return True
+
+    @rank_zero_only
+    def on_validation_epoch_end(self, trainer, pl_module):
+        ckpt_callback = None
+        for cb in trainer.callbacks:
+            if isinstance(cb, ModelCheckpoint):
+                ckpt_callback = cb
+                break
+        if ckpt_callback is None or not ckpt_callback.best_model_path:
+            return
+        best_ckpt = ckpt_callback.best_model_path
+        if not os.path.exists(best_ckpt):
+            return
+        if not self._setup_token():
+            return
+
+        epoch = trainer.current_epoch
+        print(f"[KaggleUploader] Subiendo checkpoint epoch {epoch}: {best_ckpt}")
+        import shutil, subprocess
+        upload_dir = "/tmp/kaggle_upload"
+        os.makedirs(upload_dir, exist_ok=True)
+        dest = os.path.join(upload_dir, f"epoch_{epoch:03d}.ckpt")
+        shutil.copy2(best_ckpt, dest)
+
+        meta_path = os.path.join(upload_dir, "dataset-metadata.json")
+        if not os.path.exists(meta_path):
+            import json
+            meta = {"title": "PID M3FD Checkpoints", "id": self.dataset,
+                    "licenses": [{"name": "CC0-1.0"}]}
+            with open(meta_path, "w") as f:
+                json.dump(meta, f)
+            # Crear dataset si no existe
+            subprocess.run(["kaggle", "datasets", "create", "-p", upload_dir], check=False)
+        else:
+            result = subprocess.run(
+                ["kaggle", "datasets", "version", "-p", upload_dir, "-m", f"epoch {epoch}"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                print(f"[KaggleUploader] OK: epoch {epoch} subido.")
+            else:
+                print(f"[KaggleUploader] Error: {result.stderr[:200]}")
+
+
 if __name__ == "__main__":
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
@@ -620,6 +689,12 @@ if __name__ == "__main__":
             },
             "cuda_callback": {
                 "target": "main.CUDACallback"
+            },
+            "kaggle_uploader": {
+                "target": "main.KaggleCheckpointUploader",
+                "params": {
+                    "dataset": "ginoquinde/pid-m3fd-checkpoints"
+                }
             },
         }
         if version.parse(pl.__version__) >= version.parse('1.4.0'):
